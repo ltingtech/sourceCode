@@ -1971,6 +1971,7 @@ int listenToPort(int port, int *fds, int *count) {
                 server.tcp_backlog);
         } else {
             /* Bind IPv4 address. */
+            //连接到IP4地址
             fds[*count] = anetTcpServer(server.neterr,port,server.bindaddr[j],
                 server.tcp_backlog);
         }
@@ -2030,7 +2031,14 @@ void resetServerStats(void) {
 
 void initServer(void) {
     int j;
-
+    /*
+    void（* signal（int sig，void（* func）（int）））（int）;
+    设置处理信号的功能
+    指定使用sig指定的信号编号处理信号的方法。 参数func指定程序可以处理信号的三种方式之一：
+    默认处理（SIG_DFL）：信号由该特定信号的默认动作处理。
+    忽略信号（SIG_IGN）：忽略信号，即使没有意义，代码执行仍将继续。
+    函数处理程序：定义一个特定的函数来处理信号。
+    */
     signal(SIGHUP, SIG_IGN);
     signal(SIGPIPE, SIG_IGN);
     setupSignalHandlers();
@@ -2059,7 +2067,9 @@ void initServer(void) {
     server.system_memory_size = zmalloc_get_memory_size();
 
     createSharedObjects();
+    //设置可以打开的文件数，没有具体看
     adjustOpenFilesLimit();
+    //创建事件循环
     server.el = aeCreateEventLoop(server.maxclients+CONFIG_FDSET_INCR);
     if (server.el == NULL) {
         serverLog(LL_WARNING,
@@ -2067,10 +2077,12 @@ void initServer(void) {
             strerror(errno));
         exit(1);
     }
+    //redis中也是包含多个数据库的概念，数据库存储了键-值对，可以利用select DB_Index切换数据库
     server.db = zmalloc(sizeof(redisDb)*server.dbnum);
 
     /* Open the TCP listening socket for the user commands. */
     if (server.port != 0 &&
+        //建立监听
         listenToPort(server.port,server.ipfd,&server.ipfd_count) == C_ERR)
         exit(1);
 
@@ -2103,6 +2115,7 @@ void initServer(void) {
         server.db[j].avg_ttl = 0;
         server.db[j].defrag_later = listCreate();
     }
+    //内存回收池相关，池长度为16
     evictionPoolAlloc(); /* Initialize the LRU keys pool. */
     server.pubsub_channels = dictCreate(&keylistDictType,NULL);
     server.pubsub_patterns = listCreate();
@@ -4192,7 +4205,7 @@ int main(int argc, char **argv) {
     server.supervised = redisIsSupervised(server.supervised_mode);
     int background = server.daemonize && !server.supervised;
     if (background) daemonize();
-
+    //redisServer初始化
     initServer();
     if (background || server.pidfile) createPidFile();
     redisSetProcTitle(argv[0]);

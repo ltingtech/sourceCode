@@ -146,8 +146,10 @@ static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
     这时不用EPOLL_CTL_ADD,因为socket fd并未清空，只是事件类型清空。这一步非常重要。
     */
 
+   //轮询事件，发生的事件会存储在state->events中
     retval = epoll_wait(state->epfd,state->events,eventLoop->setsize,
             tvp ? (tvp->tv_sec*1000 + tvp->tv_usec/1000) : -1);
+    //返回值大于0，说明有事件发生
     if (retval > 0) {
         int j;
 
@@ -160,6 +162,7 @@ static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
             if (e->events & EPOLLOUT) mask |= AE_WRITABLE;
             if (e->events & EPOLLERR) mask |= AE_WRITABLE;
             if (e->events & EPOLLHUP) mask |= AE_WRITABLE;
+            //如果有事件发生，就把事件放在事件循环的fire字段中
             eventLoop->fired[j].fd = e->data.fd;
             eventLoop->fired[j].mask = mask;
         }
