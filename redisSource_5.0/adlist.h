@@ -36,21 +36,24 @@
 typedef struct listNode {
     struct listNode *prev;
     struct listNode *next;
-    void *value;
+    void *value;  //使用void指针，说明可以是任意类型的值
 } listNode;
 
+//链表迭代器，通过direction字段控制方向
 typedef struct listIter {
     listNode *next;
     int direction;
 } listIter;
 
+//表示整个链表的信息
 typedef struct list {
     listNode *head;
     listNode *tail;
-    void *(*dup)(void *ptr);
-    void (*free)(void *ptr);
-    int (*match)(void *ptr, void *key);
-    unsigned long len;
+    //3个函数指针就像类中的成员函数一样
+    void *(*dup)(void *ptr); //复制链表节点保存的值，//函数指针用法，这里表示链表结构的dup属性是一个函数指针，函数接受一个指针参数, void 指针可以指向任意类型的数据
+    void (*free)(void *ptr); //释放链表节点保存的值
+    int (*match)(void *ptr, void *key); //比较链表节点所保存的节点值和另一个输入的值是否相等
+    unsigned long len; //链表总长度，可快速获得链表的节点数量
 } list;
 
 /* Functions implemented as macros */
@@ -70,6 +73,7 @@ typedef struct list {
 #define listGetMatchMethod(l) ((l)->match)
 
 /* Prototypes */
+//函数原型，C语言中在函数实现之前，一般先声明函数原型，防止编译器出错
 list *listCreate(void);
 void listRelease(list *list);
 void listEmpty(list *list);

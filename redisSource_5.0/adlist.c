@@ -60,8 +60,10 @@ void listEmpty(list *list)
 
     current = list->head;
     len = list->len;
+    //逐个释放节点空间
     while(len--) {
         next = current->next;
+        //先释放value的空间
         if (list->free) list->free(current->value);
         zfree(current);
         current = next;
@@ -93,9 +95,11 @@ list *listAddNodeHead(list *list, void *value)
         return NULL;
     node->value = value;
     if (list->len == 0) {
+        //头尾节点指向统一节点
         list->head = list->tail = node;
         node->prev = node->next = NULL;
     } else {
+        //链表头新增节点
         node->prev = NULL;
         node->next = list->head;
         list->head->prev = node;

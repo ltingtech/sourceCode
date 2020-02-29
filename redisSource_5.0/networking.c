@@ -731,9 +731,11 @@ static void acceptCommonHandler(int fd, int flags, char *ip) {
     c->flags |= flags;
 }
 
+//tcp可读的回调函数
 void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     int cport, cfd, max = MAX_ACCEPTS_PER_CALL;
     char cip[NET_IP_STR_LEN];
+    //UNUSED 的作用是强制性地把类型转化为void
     UNUSED(el);
     UNUSED(mask);
     UNUSED(privdata);

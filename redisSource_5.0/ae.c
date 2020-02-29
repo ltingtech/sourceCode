@@ -134,6 +134,7 @@ void aeStop(aeEventLoop *eventLoop) {
     eventLoop->stop = 1;
 }
 
+//添加tcp可读事件到事件循环中
 int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
         aeFileProc *proc, void *clientData)
 {
@@ -192,6 +193,7 @@ static void aeGetTime(long *seconds, long *milliseconds)
     *milliseconds = tv.tv_usec/1000;
 }
 
+//修改时间
 static void aeAddMillisecondsToNow(long long milliseconds, long *sec, long *ms) {
     long cur_sec, cur_ms, when_sec, when_ms;
 
@@ -206,6 +208,7 @@ static void aeAddMillisecondsToNow(long long milliseconds, long *sec, long *ms) 
     *ms = when_ms;
 }
 
+//往事件循环中添加一个timer事件
 long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
         aeTimeProc *proc, void *clientData,
         aeEventFinalizerProc *finalizerProc)
@@ -215,12 +218,15 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
 
     te = zmalloc(sizeof(*te));
     if (te == NULL) return AE_ERR;
+    //设置事件的id
     te->id = id;
+    //给事件的 
     aeAddMillisecondsToNow(milliseconds,&te->when_sec,&te->when_ms);
     te->timeProc = proc;
     te->finalizerProc = finalizerProc;
     te->clientData = clientData;
     te->prev = NULL;
+    //事件的结构也是通过一个双链表，可以根据当前事件方便地遍历上/下一个时间事件
     te->next = eventLoop->timeEventHead;
     if (te->next)
         te->next->prev = te;
