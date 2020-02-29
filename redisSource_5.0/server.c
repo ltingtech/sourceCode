@@ -1089,6 +1089,7 @@ void updateCachedTime(int update_daylight_info) {
  * Here is where we do a number of things that need to be done asynchronously.
  * For instance:
  *
+ * 定时操作的类型，
  * - Active expired keys collection (it is also performed in a lazy way on
  *   lookup).
  * - Software watchdog.
@@ -1118,6 +1119,8 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     updateCachedTime(1);
 
     server.hz = server.config_hz;
+
+    //server.hz字段有什么用处？
     /* Adapt the server.hz value to the number of configured clients. If we have
      * many clients, we want to call serverCron() with an higher frequency. */
     if (server.dynamic_hz) {
@@ -1131,7 +1134,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
             }
         }
     }
-
+    // #define run_with_period(_ms_) if ((_ms_ <= 1000/server.hz) || !(server.cronloops%((_ms_)/(1000/server.hz))))
     run_with_period(100) {
         trackInstantaneousMetric(STATS_METRIC_COMMAND,server.stat_numcommands);
         trackInstantaneousMetric(STATS_METRIC_NET_INPUT,
@@ -2117,8 +2120,11 @@ void initServer(void) {
     }
     //内存回收池相关，池长度为16
     evictionPoolAlloc(); /* Initialize the LRU keys pool. */
+    //redis的订阅相关，字典型，key是频道，value是所有订阅了该频道的客户端
     server.pubsub_channels = dictCreate(&keylistDictType,NULL);
+    //模式订阅，订阅符合某个模式的频道，pubsub_pattern字段初始化为一个链表
     server.pubsub_patterns = listCreate();
+    //设置链表的free字段（函数指针）为freePubsubPattern
     listSetFreeMethod(server.pubsub_patterns,freePubsubPattern);
     listSetMatchMethod(server.pubsub_patterns,listMatchPubsubPattern);
     server.cronloops = 0;
@@ -2136,6 +2142,7 @@ void initServer(void) {
     server.rdb_save_time_last = -1;
     server.rdb_save_time_start = -1;
     server.dirty = 0;
+    //重置server的状态字段
     resetServerStats();
     /* A few stats we don't want to reset: server startup time, and peak mem. */
     server.stat_starttime = time(NULL);
@@ -2155,6 +2162,7 @@ void initServer(void) {
     /* Create the timer callback, this is our way to process many background
      * operations incrementally, like clients timeout, eviction of unaccessed
      * expired keys and so forth. */
+    //timer事件处理接口，完成一些后台工作, serverCron是一个函数指针
     if (aeCreateTimeEvent(server.el, 1, serverCron, NULL, NULL) == AE_ERR) {
         serverPanic("Can't create event loop timers.");
         exit(1);
@@ -2163,6 +2171,7 @@ void initServer(void) {
     /* Create an event handler for accepting new connections in TCP and Unix
      * domain sockets. */
     for (j = 0; j < server.ipfd_count; j++) {
+        //增加tcp可读事件
         if (aeCreateFileEvent(server.el, server.ipfd[j], AE_READABLE,
             acceptTcpHandler,NULL) == AE_ERR)
             {
@@ -2170,6 +2179,7 @@ void initServer(void) {
                     "Unrecoverable error creating server.ipfd file event.");
             }
     }
+    //unix可读事件处理
     if (server.sofd > 0 && aeCreateFileEvent(server.el,server.sofd,AE_READABLE,
         acceptUnixHandler,NULL) == AE_ERR) serverPanic("Unrecoverable error creating server.sofd file event.");
 
@@ -2198,6 +2208,7 @@ void initServer(void) {
      * no explicit limit in the user provided configuration we set a limit
      * at 3 GB using maxmemory with 'noeviction' policy'. This avoids
      * useless crashes of the Redis instance for out of memory. */
+    //保险起见，再次设置redis的最大可用内存限制
     if (server.arch_bits == 32 && server.maxmemory == 0) {
         serverLog(LL_WARNING,"Warning: 32 bit instance detected but no memory limit set. Setting 3 GB maxmemory limit with 'noeviction' policy now.");
         server.maxmemory = 3072LL*(1024*1024); /* 3 GB */
@@ -3736,8 +3747,10 @@ void linuxMemoryWarnings(void) {
 void createPidFile(void) {
     /* If pidfile requested, but no pidfile defined, use
      * default pidfile path */
+    //默认的pid文件路径，/var/run/redis.pid
     if (!server.pidfile) server.pidfile = zstrdup(CONFIG_DEFAULT_PID_FILE);
 
+    //将进程pid写入到pid文件中
     /* Try to write the pid file in a best-effort way. */
     FILE *fp = fopen(server.pidfile,"w");
     if (fp) {
@@ -4095,6 +4108,7 @@ int main(int argc, char **argv) {
     getRandomHexChars(hashseed,sizeof(hashseed));
     dictSetHashFunctionSeed((uint8_t*)hashseed);
     server.sentinel_mode = checkForSentinelMode(argc,argv);
+    //初始化实例配置
     initServerConfig();
     moduleInitModulesSystem();
 
@@ -4205,7 +4219,7 @@ int main(int argc, char **argv) {
     server.supervised = redisIsSupervised(server.supervised_mode);
     int background = server.daemonize && !server.supervised;
     if (background) daemonize();
-    //redisServer初始化
+    //redisServer初始化，事件循环初始化
     initServer();
     if (background || server.pidfile) createPidFile();
     redisSetProcTitle(argv[0]);
