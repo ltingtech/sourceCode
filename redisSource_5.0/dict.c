@@ -189,12 +189,16 @@ int dictRehash(dict *d, int n) {
     int empty_visits = n*10; /* Max number of empty buckets to visit. */
     if (!dictIsRehashing(d)) return 0;
 
+    //n表示执行rehash的几次循环，每次都是对hash表中的一个节点进行rehash，当然这由于hash冲突这个节点可能是一个链表
+    //同时，如果hash表比较稀疏，容易碰到特别多空节点，这里还对每次rehash碰到的空节点的数做了限制，即10*n, 如果
+    //碰到了这个多个空节点，那也是会中断rehash过程
     while(n-- && d->ht[0].used != 0) {
         dictEntry *de, *nextde;
 
         /* Note that rehashidx can't overflow as we are sure there are more
          * elements because ht[0].used != 0 */
         assert(d->ht[0].size > (unsigned long)d->rehashidx);
+        //hash的结构是怎么实现的，
         while(d->ht[0].table[d->rehashidx] == NULL) {
             d->rehashidx++;
             if (--empty_visits == 0) return 1;
@@ -207,6 +211,7 @@ int dictRehash(dict *d, int n) {
             nextde = de->next;
             /* Get the index in the new hash table */
             h = dictHashKey(d, de->key) & d->ht[1].sizemask;
+            //存放的是地址，直接实现链表中插入了元素，拉链法解决哈希冲突，每次插入都是在拉链的头部插入
             de->next = d->ht[1].table[h];
             d->ht[1].table[h] = de;
             d->ht[0].used--;
@@ -258,6 +263,7 @@ int dictRehashMilliseconds(dict *d, int ms) {
  * dictionary so that the hash table automatically migrates from H1 to H2
  * while it is actively used. */
 static void _dictRehashStep(dict *d) {
+    //iterators是怎么维护的，什么时候会改动该值
     if (d->iterators == 0) dictRehash(d,1);
 }
 
@@ -614,7 +620,11 @@ dictEntry *dictGetRandomKey(dict *d)
     int listlen, listele;
 
     if (dictSize(d) == 0) return NULL;
+    //什么时候会发生再hash呢
     if (dictIsRehashing(d)) _dictRehashStep(d);
+
+    //分两种情况，1）当前正在发生rehash， 2）当前没有发生rehash，
+    //针对以上两种情况进行讨论，但是选择的策略都是随机选择
     if (dictIsRehashing(d)) {
         do {
             /* We are sure there are no elements in indexes from 0
@@ -636,6 +646,7 @@ dictEntry *dictGetRandomKey(dict *d)
      * list and we need to get a random element from the list.
      * The only sane way to do so is counting the elements and
      * select a random index. */
+    //挑选得到一个bucket, 但是由于hash冲突的拉链法处理，这里是一个链表，所以还得从链表中随机挑选出一个key
     listlen = 0;
     orighe = he;
     while(he) {

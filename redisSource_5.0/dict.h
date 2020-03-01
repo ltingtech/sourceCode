@@ -48,11 +48,11 @@ typedef struct dictEntry {
     void *key;
     union {
         void *val;
-        uint64_t u64;
+        uint64_t u64;  //用来存放每个键的过期时间
         int64_t s64;
         double d;
     } v;
-    struct dictEntry *next;
+    struct dictEntry *next; //还指向下一个
 } dictEntry;
 
 typedef struct dictType {
@@ -66,18 +66,23 @@ typedef struct dictType {
 
 /* This is our hash table structure. Every dictionary has two of this as we
  * implement incremental rehashing, for the old to the new table. */
+//每个字典都是有两个hash table组成，用来发生rehash的时候相互交替使用
 typedef struct dictht {
-    dictEntry **table;
+    dictEntry **table; //表示的是一个哈希表，但是哈希表中存放的元素是dictEntry链表的头节点，说明是用拉链法解决哈希冲突
+    //哈希表的大小
     unsigned long size;
+    // 哈希表大小掩码，用于计算索引值
+    // 总是等于 size - 1
     unsigned long sizemask;
-    unsigned long used;
+    // 该哈希表非空节点的数量
+    unsigned long used; 
 } dictht;
 
 typedef struct dict {
     dictType *type;
     void *privdata;
     dictht ht[2];
-    long rehashidx; /* rehashing not in progress if rehashidx == -1 */
+    long rehashidx; /* rehashing not in progress if rehashidx == -1 */  //如果大于0，说明正在进行rehash，且表示rehash目前进行到的过程索引
     unsigned long iterators; /* number of iterators currently running */
 } dict;
 

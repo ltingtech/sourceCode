@@ -58,6 +58,7 @@ int activeExpireCycleTryExpire(redisDb *db, dictEntry *de, long long now) {
         robj *keyobj = createStringObject(key,sdslen(key));
 
         propagateExpire(db,keyobj,server.lazyfree_lazy_expire);
+        //根据这个参数的配置，决定是同步删除还是异步删除
         if (server.lazyfree_lazy_expire)
             dbAsyncDelete(db,keyobj);
         else
@@ -103,6 +104,7 @@ void activeExpireCycle(int type) {
 
     int j, iteration = 0;
     int dbs_per_call = CRON_DBS_PER_CALL;
+    //当前时间的微秒事件戳
     long long start = ustime(), timelimit, elapsed;
 
     /* When clients are paused the dataset should be static not just from the
@@ -164,16 +166,22 @@ void activeExpireCycle(int type) {
             iteration++;
 
             /* If there is nothing to expire try next DB ASAP. */
+            //每个database中的过期键都放在db->expires中
+            //dictSize 表示使用了的空间
             if ((num = dictSize(db->expires)) == 0) {
                 db->avg_ttl = 0;
                 break;
             }
+            //db->expires的结构是怎么样的，怎么计算size的时候是计算其两个数组大小之和，难道是存在两个数组之中？
+            //slots表示总的空间
             slots = dictSlots(db->expires);
+            //毫秒
             now = mstime();
 
             /* When there are less than 1% filled slots getting random
              * keys is expensive, so stop here waiting for better times...
              * The dictionary will be resized asap. */
+            //如果一个数据库中，如果使用的空间占总空间的比例不到1%，那就不考虑回收这个数据库
             if (num && slots > DICT_HT_INITIAL_SIZE &&
                 (num*100/slots < 1)) break;
 
@@ -182,16 +190,18 @@ void activeExpireCycle(int type) {
             expired = 0;
             ttl_sum = 0;
             ttl_samples = 0;
-
+            //如果db->expires使用的空间超过20，则只取20个
             if (num > ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP)
                 num = ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP;
 
             while (num--) {
                 dictEntry *de;
                 long long ttl;
-
+                //db->expires 存放的不是已过期的时间，而是只是设置了过期时间的键
                 if ((de = dictGetRandomKey(db->expires)) == NULL) break;
+                //ttl表示距离这个键的过期时间的剩余时间
                 ttl = dictGetSignedIntegerVal(de)-now;
+                //根据过期时间和当前时间的对比，如果已经过期，则删除该键
                 if (activeExpireCycleTryExpire(db,de,now)) expired++;
                 if (ttl > 0) {
                     /* We want the average TTL of keys yet not expired. */
@@ -203,6 +213,8 @@ void activeExpireCycle(int type) {
             total_expired += expired;
 
             /* Update the average TTL stats for this database. */
+            // avg_ttl 是根据每次抽样的20个键的剩余时间计算的平均值，并且每次更新db->avg_ttl时，是根据当前值和历史值
+            //按权重计算更新的
             if (ttl_samples) {
                 long long avg_ttl = ttl_sum/ttl_samples;
 
@@ -219,6 +231,8 @@ void activeExpireCycle(int type) {
             if ((iteration & 0xf) == 0) { /* check once every 16 iterations. */
                 elapsed = ustime()-start;
                 if (elapsed > timelimit) {
+                    //每次回收操作都是有时间限制，目前是25ms，但是并不是在每次迭代的时候就去计算一次，而是采用每15此迭代
+                    //判断一次此次执行是否超过时间限制
                     timelimit_exit = 1;
                     server.stat_expired_time_cap_reached_count++;
                     break;
@@ -226,6 +240,7 @@ void activeExpireCycle(int type) {
             }
             /* We don't repeat the cycle if there are less than 25% of keys
              * found expired in the current DB. */
+            //每此循环抽样可20个键，如果有超过5个过期，才会继续下一循环，否则就停止循环了
         } while (expired > ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP/4);
     }
 
@@ -239,6 +254,7 @@ void activeExpireCycle(int type) {
         current_perc = (double)total_expired/total_sampled;
     } else
         current_perc = 0;
+    //更新对数据库中过期键占比的估计值，也是通过权重的方法进行估计的
     server.stat_expired_stale_perc = (current_perc*0.05)+
                                      (server.stat_expired_stale_perc*0.95);
 }
