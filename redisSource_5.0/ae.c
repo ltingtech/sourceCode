@@ -76,7 +76,14 @@ aeEventLoop *aeCreateEventLoop(int setsize) {
     eventLoop->maxfd = -1;
     eventLoop->beforesleep = NULL;
     eventLoop->aftersleep = NULL;
-    //aeApiCreate是根据系统不同，采用不同的IO多路复用机制，如采用epoll,则该函数在ae_epoll.c中
+    //根据系统不同，采用不同的IO多路复用机制，这里的aeApiCreate方法也是使用不同的文件定义下的方法，，如采用epoll,则该函数在ae_epoll.c中
+    //该方法主要是对apidata 字段进行初始化，ae_epoll.c文件中对apidata字段的结构如下
+    /**
+    typedef struct aeApiState {
+        int epfd;
+        struct epoll_event *events;
+    } aeApiState;
+     */
     if (aeApiCreate(eventLoop) == -1) goto err;
     /* Events with mask == AE_NONE are not set. So let's initialize the
      * vector with it. */
@@ -258,6 +265,7 @@ int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id)
  *    Much better but still insertion or deletion of timers is O(N).
  * 2) Use a skiplist to have this operation as O(1) and insertion as O(log(N)).
  */
+//在非排序数组中找到最近的一个时间事件
 static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)
 {
     aeTimeEvent *te = eventLoop->timeEventHead;
@@ -362,6 +370,7 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
  * the events that's possible to process without to wait are processed.
  *
  * The function returns the number of events processed. */
+//返回此次循环处理的事件的总数
 int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 {
     int processed = 0, numevents;
@@ -373,6 +382,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
      * file events to process as long as we want to process time
      * events, in order to sleep until the next time event is ready
      * to fire. */
+    //处理时间事件
     if (eventLoop->maxfd != -1 ||
         ((flags & AE_TIME_EVENTS) && !(flags & AE_DONT_WAIT))) {
         int j;
@@ -383,7 +393,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
             shortest = aeSearchNearestTimer(eventLoop);
         if (shortest) {
             long now_sec, now_ms;
-
+            //获取当前事件
             aeGetTime(&now_sec, &now_ms);
             tvp = &tv;
 
@@ -438,6 +448,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
              * This is useful when, for instance, we want to do things
              * in the beforeSleep() hook, like fsynching a file to disk,
              * before replying to a client. */
+            //决定处理可读事件和可写事件的顺序，没太明白他说的顺序作用
             int invert = fe->mask & AE_BARRIER;
 
             /* Note the "fe->mask & mask & ..." code: maybe an already
@@ -446,7 +457,9 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
              *
              * Fire the readable event if the call sequence is not
              * inverted. */
+            //如果没有改变读写事件的处理顺序，则先处理读事件
             if (!invert && fe->mask & mask & AE_READABLE) {
+                //每个文件读写事件的rfileProc指向一个回调函数地址，即acceptTcpHandler函数，在networking.c文件中
                 fe->rfileProc(eventLoop,fd,fe->clientData,mask);
                 fired++;
             }
@@ -467,7 +480,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
                     fired++;
                 }
             }
-
+            //每个循环表示一个文件句柄的处理逻辑
             processed++;
         }
     }
@@ -500,11 +513,13 @@ int aeWait(int fd, int mask, long long milliseconds) {
     }
 }
 
+//事件循环主函数
 void aeMain(aeEventLoop *eventLoop) {
     eventLoop->stop = 0;
     while (!eventLoop->stop) {
         if (eventLoop->beforesleep != NULL)
             eventLoop->beforesleep(eventLoop);
+        //AE_ALL_EVENTS 表示所有的事件类型，即文件可读事件和时间时间
         aeProcessEvents(eventLoop, AE_ALL_EVENTS|AE_CALL_AFTER_SLEEP);
     }
 }

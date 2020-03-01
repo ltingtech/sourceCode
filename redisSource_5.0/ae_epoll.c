@@ -33,8 +33,25 @@
 
 typedef struct aeApiState {
     int epfd;
-    struct epoll_event *events;
+    struct epoll_event *events;  //存放监听事件的地方，可以指定想监听的事件的数量
 } aeApiState;
+
+//epoll_event事件结构体
+/*
+struct epoll_event
+{
+  uint32_t events;   //Epoll events 即需要监听的事件类型
+  epoll_data_t data;    //User data variable  //包括一些其它数据，如句柄号
+} __attribute__ ((__packed__));
+
+typedef union epoll_data
+{
+  void *ptr;
+  int fd;
+  uint32_t u32;
+  uint64_t u64;
+} epoll_data_t;
+*/
 
 static int aeApiCreate(aeEventLoop *eventLoop) {
     aeApiState *state = zmalloc(sizeof(aeApiState));
@@ -45,7 +62,13 @@ static int aeApiCreate(aeEventLoop *eventLoop) {
         zfree(state);
         return -1;
     }
-    //函数生成一个epoll专用的文件描述符。它其实是在内核申请一空间，用来存放你想关注的socket fd上是否发生以及发生了什么事件。size就是你在这个epoll fd上能关注的最大socket fd数
+    /**
+     * 创建epoll句柄
+   int epfd = epoll_create(intsize);                                                                   
+
+       创建一个epoll的句柄，size用来告诉内核这个监听的数目一共有多大。
+    */
+    //函数生成一个epoll专用的文件描述符（epoll fd）。它其实是在内核申请一空间，用来存放你想关注的socket fd上是否发生以及发生了什么事件。size就是你在这个epoll fd上能关注的最大socket fd数
     state->epfd = epoll_create(1024); /* 1024 is just a hint for the kernel */
     if (state->epfd == -1) {
         zfree(state->events);
@@ -72,7 +95,7 @@ static void aeApiFree(aeEventLoop *eventLoop) {
 }
 
 static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask) {
-    aeApiState *state = eventLoop->apidata;
+    aeApiState *state = eventLoop->apidata; //包含epoll fd 和epoll_event
     //事件结构体
     /*
     struct epoll_event
@@ -101,7 +124,20 @@ static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask) {
     if (mask & AE_READABLE) ee.events |= EPOLLIN;
     if (mask & AE_WRITABLE) ee.events |= EPOLLOUT;
     ee.data.fd = fd;
+    /**
+     int epoll_ctl(int epfd, intop, int fd, struct epoll_event *event); 
+    
+   epoll的事件注册函数，它不同与select()是在监听事件时告诉内核要监听什么类型的事件，而是在这里先注册要监听的事件类型。
 
+           第一个参数是epoll_create()的返回值，
+           第二个参数表示动作，用三个宏来表示：
+           EPOLL_CTL_ADD：       注册新的fd到epfd中；
+          EPOLL_CTL_MOD：      修改已经注册的fd的监听事件；
+           EPOLL_CTL_DEL：        从epfd中删除一个fd；
+         第三个参数是需要监听的fd，
+          第四个参数是告诉内核需要监听什么事件
+    **/
+    //把一个事件添加到epoll监听对象列表中
     if (epoll_ctl(state->epfd,op,fd,&ee) == -1) return -1;
     return 0;
 }
@@ -124,6 +160,10 @@ static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int delmask) {
         epoll_ctl(state->epfd,EPOLL_CTL_DEL,fd,&ee);
     }
 }
+
+/**
+ * 查看epoll是否有事件发生
+*/
 
 static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
     aeApiState *state = eventLoop->apidata;
@@ -161,7 +201,7 @@ static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
             if (e->events & EPOLLOUT) mask |= AE_WRITABLE;
             if (e->events & EPOLLERR) mask |= AE_WRITABLE;
             if (e->events & EPOLLHUP) mask |= AE_WRITABLE;
-            //如果有事件发生，就把事件放在事件循环的fire字段中
+            //如果有事件发生，就把事件放在事件循环的fire字段中，这里面没说怎么处理定时事件？
             eventLoop->fired[j].fd = e->data.fd;
             eventLoop->fired[j].mask = mask;
         }

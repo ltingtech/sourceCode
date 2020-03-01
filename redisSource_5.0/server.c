@@ -1086,10 +1086,12 @@ void updateCachedTime(int update_daylight_info) {
 }
 
 /* This is our timer interrupt, called server.hz times per second.
- * Here is where we do a number of things that need to be done asynchronously.
+ * Here is where we do a number of things that need to be done asynchronously（异步de）.
  * For instance:
  *
  * 定时操作的类型，
+ * 过期key回收
+ * bgsave 和aof重写触发
  * - Active expired keys collection (it is also performed in a lazy way on
  *   lookup).
  * - Software watchdog.
@@ -1101,12 +1103,13 @@ void updateCachedTime(int update_daylight_info) {
  * - Many more...
  *
  * Everything directly called here will be called server.hz times per second,
- * so in order to throttle execution of things we want to do less frequently
- * a macro is used: run_with_period(milliseconds) { .... }
+ * so in order to throttle（减速） execution of things we want to do less frequently
+ * a macro（宏指令） is used: run_with_period(milliseconds) { .... }
  */
 
 int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     int j;
+    //这里只是类型转化一下，其实什么也没做，主要是对参数操作下，防止出现提示参数没有被使用的警告
     UNUSED(eventLoop);
     UNUSED(id);
     UNUSED(clientData);
@@ -1120,7 +1123,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
 
     server.hz = server.config_hz;
 
-    //server.hz字段有什么用处？
+    //server.hz字段有什么用处，这是个配置值，表示执行时间事件的频率，默认为10，如果客户端数太多，则执行频率应该更大，为什么？
     /* Adapt the server.hz value to the number of configured clients. If we have
      * many clients, we want to call serverCron() with an higher frequency. */
     if (server.dynamic_hz) {
@@ -1134,7 +1137,13 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
             }
         }
     }
+    //
     // #define run_with_period(_ms_) if ((_ms_ <= 1000/server.hz) || !(server.cronloops%((_ms_)/(1000/server.hz))))
+    //server.hz 表示的是serverCron这个函数每秒执行的次数，run_with_period（m）表示m毫秒执行一次，因为run_with_period是在serverCron
+    //函数体内调用的，说明前者的执行频率肯定不可能比后者还快，只可能是更慢
+    //所以，1）(_ms_ <= 1000/server.hz) 时，说明run_with_period的执行频率本来更快，说明当前当然可以执行
+    //2）如果run_with_period 这个执行频率更慢，那就看等到执行第几个轮回的erverCron函数时，需要执行un_with_period
+    //如此就实现了可以自己把有些工作的执行频率控制得更低一些
     run_with_period(100) {
         trackInstantaneousMetric(STATS_METRIC_COMMAND,server.stat_numcommands);
         trackInstantaneousMetric(STATS_METRIC_NET_INPUT,
@@ -1154,7 +1163,9 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
      *
      * Note that you can change the resolution altering the
      * LRU_CLOCK_RESOLUTION define. */
+    //获取当前时间换算的的LRU lock 时间
     unsigned long lruclock = getLRUClock();
+    //设置server.lrulock为当前时间的lru lock
     atomicSet(server.lruclock,lruclock);
 
     /* Record the max memory used since the server was started. */
@@ -1543,8 +1554,10 @@ void initServerConfig(void) {
     pthread_mutex_init(&server.unixtime_mutex,NULL);
 
     updateCachedTime(1);
+    //产生一个随机id给server.runid
     getRandomHexChars(server.runid,CONFIG_RUN_ID_SIZE);
     server.runid[CONFIG_RUN_ID_SIZE] = '\0';
+    //初始化server 的repliId 和repliId2
     changeReplicationId();
     clearReplicationId2();
     server.timezone = getTimeZone(); /* Initialized by tzset(). */
@@ -1711,6 +1724,7 @@ void initServerConfig(void) {
      * redis.conf using the rename-command directive. */
     server.commands = dictCreate(&commandTableDictType,NULL);
     server.orig_commands = dictCreate(&commandTableDictType,NULL);
+    //命令表初始化
     populateCommandTable();
     server.delCommand = lookupCommandByCString("del");
     server.multiCommand = lookupCommandByCString("multi");
@@ -2162,7 +2176,7 @@ void initServer(void) {
     /* Create the timer callback, this is our way to process many background
      * operations incrementally, like clients timeout, eviction of unaccessed
      * expired keys and so forth. */
-    //timer事件处理接口，完成一些后台工作, serverCron是一个函数指针
+    //timer事件处理接口，完成一些后台工作, serverCron是一个函数指针，注意这个时间事件不是由epoll去监听的
     if (aeCreateTimeEvent(server.el, 1, serverCron, NULL, NULL) == AE_ERR) {
         serverPanic("Can't create event loop timers.");
         exit(1);
@@ -2170,6 +2184,7 @@ void initServer(void) {
 
     /* Create an event handler for accepting new connections in TCP and Unix
      * domain sockets. */
+    //server.ipfd_count 表示server正在监听的句柄数量，在添加监听的过程中会递增
     for (j = 0; j < server.ipfd_count; j++) {
         //增加tcp可读事件
         if (aeCreateFileEvent(server.el, server.ipfd[j], AE_READABLE,
@@ -4062,7 +4077,7 @@ int redisIsSupervised(int mode) {
     return 0;
 }
 
-
+// mac下调试⌃- / ⌃⇧- 后退/前进
 int main(int argc, char **argv) {
     /*在系统文件time.h中定义，包含当前时间的秒时间戳和微秒时间戳*/
     struct timeval tv;
@@ -4105,7 +4120,9 @@ int main(int argc, char **argv) {
     gettimeofday(&tv,NULL);
 
     char hashseed[16];
+    //为redis产生一个随机的runId，存放在hashseed中
     getRandomHexChars(hashseed,sizeof(hashseed));
+    //将hashseed拷贝到dict_hash_function_seed变量中
     dictSetHashFunctionSeed((uint8_t*)hashseed);
     server.sentinel_mode = checkForSentinelMode(argc,argv);
     //初始化实例配置
@@ -4257,8 +4274,10 @@ int main(int argc, char **argv) {
         serverLog(LL_WARNING,"WARNING: You specified a maxmemory value that is less than 1MB (current value is %llu bytes). Are you sure this is what you really want?", server.maxmemory);
     }
 
+    //指定事件循环中，每次在等待事件到达前进入睡眠时的调用函数
     aeSetBeforeSleepProc(server.el,beforeSleep);
     aeSetAfterSleepProc(server.el,afterSleep);
+    //启动事件循环机制
     aeMain(server.el);
     aeDeleteEventLoop(server.el);
     return 0;
