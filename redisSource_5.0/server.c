@@ -1005,7 +1005,9 @@ void clientsCron(void) {
 void databasesCron(void) {
     /* Expire keys by random sampling. Not required for slaves
      * as master will synthesize DELs for us. */
+    //active_expire_enabled 表示主动删除过期键标志，主动删除表示redis会主动去找删除的键，而不是被动地等数据被访问后发现过期再删除
     if (server.active_expire_enabled) {
+        //masterhost应该是表示主节点的地址，如果当前实例本来就是主节点，那实例的masterhost就会等于NULL
         if (server.masterhost == NULL) {
             activeExpireCycle(ACTIVE_EXPIRE_CYCLE_SLOW);
         } else {
@@ -1024,6 +1026,7 @@ void databasesCron(void) {
         /* We use global counters so if we stop the computation at a given
          * DB we'll be able to start from the successive in the next
          * cron loop iteration. */
+        //静态变量，这样的话下次循环可以接着上一次循环的位置继续往下执行
         static unsigned int resize_db = 0;
         static unsigned int rehash_db = 0;
         int dbs_per_call = CRON_DBS_PER_CALL;
@@ -1033,16 +1036,19 @@ void databasesCron(void) {
         if (dbs_per_call > server.dbnum) dbs_per_call = server.dbnum;
 
         /* Resize */
+        //每个db都有dict和expire两个hash表，当hash表的利用率不足10%时，会缩小hash表大小
         for (j = 0; j < dbs_per_call; j++) {
             tryResizeHashTables(resize_db % server.dbnum);
             resize_db++;
         }
 
         /* Rehash */
+        //这个值是在哪里设置的？
         if (server.activerehashing) {
             for (j = 0; j < dbs_per_call; j++) {
                 int work_done = incrementallyRehash(rehash_db);
                 if (work_done) {
+                    //每次只是循环一次，剩下的在下次循环时继续进行
                     /* If the function did some work, stop here, we'll do
                      * more at the next cron loop. */
                     break;
@@ -1238,6 +1244,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     clientsCron();
 
     /* Handle background operations on Redis databases. */
+    //一些后台清理工作，如哈希表的rehash操作和resize操作
     databasesCron();
 
     /* Start a scheduled AOF rewrite if this was requested by the user while
@@ -1379,7 +1386,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
         if (rdbSaveBackground(server.rdb_filename,rsiptr) == C_OK)
             server.rdb_bgsave_scheduled = 0;
     }
-
+    //每次都更新这个循环的次数，相当于一个redis实例有一个全局的变量在统计
     server.cronloops++;
     return 1000/server.hz;
 }

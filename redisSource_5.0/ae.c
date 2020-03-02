@@ -227,7 +227,7 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
     if (te == NULL) return AE_ERR;
     //设置事件的id
     te->id = id;
-    //给事件的 
+    //设定定时时间时间的触发时间，即当前时间+millionseconds
     aeAddMillisecondsToNow(milliseconds,&te->when_sec,&te->when_ms);
     te->timeProc = proc;
     te->finalizerProc = finalizerProc;
@@ -296,13 +296,16 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
      * events to be processed ASAP when this happens: the idea is that
      * processing events earlier is less dangerous than delaying them
      * indefinitely, and practice suggests it is. */
+    //解决计算机系统事件跳动的问题？
     if (now < eventLoop->lastTime) {
+        //如果当前事件比上次循环的事件还小，说明系统事件跳动了，处理办法是把所有的定时时间事件都提前执行？（这里把所有的时间事件的剩余事件都置为0）
         te = eventLoop->timeEventHead;
         while(te) {
             te->when_sec = 0;
             te = te->next;
         }
     }
+    //更新每次循环的执行事件
     eventLoop->lastTime = now;
 
     te = eventLoop->timeEventHead;
@@ -312,6 +315,7 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
         long long id;
 
         /* Remove events scheduled for deletion. */
+        //如果事件被标记为删除，则直接删除
         if (te->id == AE_DELETED_EVENT_ID) {
             aeTimeEvent *next = te->next;
             if (te->prev)
@@ -320,6 +324,7 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
                 eventLoop->timeEventHead = te->next;
             if (te->next)
                 te->next->prev = te->prev;
+            //初始化redis是，这个回调函数传的是空
             if (te->finalizerProc)
                 te->finalizerProc(eventLoop, te->clientData);
             zfree(te);
@@ -337,6 +342,7 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
             continue;
         }
         aeGetTime(&now_sec, &now_ms);
+        //通过当前事件和时间事件上的时间对比，得出是否执行
         if (now_sec > te->when_sec ||
             (now_sec == te->when_sec && now_ms >= te->when_ms))
         {
@@ -485,6 +491,8 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         }
     }
     /* Check time events */
+
+    //文件读写事件和定时时间事件的处理是分开做的，文件读写事件是利用epoll多路公用实现的，定时的则是直接代码层面做的
     if (flags & AE_TIME_EVENTS)
         processed += processTimeEvents(eventLoop);
 

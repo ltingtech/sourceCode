@@ -137,6 +137,8 @@ int dictResize(dict *d)
     int minimal;
 
     if (!dict_can_resize || dictIsRehashing(d)) return DICT_ERR;
+    //直接将hash表大小改为目前占用的空间大小，即空间占用率达到100%，这样会不会有问题，不会有问题，dictExpand
+    //函数中给出了解释，实际更改的空间应该是大于参数值的第一个2的指数倍数
     minimal = d->ht[0].used;
     if (minimal < DICT_HT_INITIAL_SIZE)
         minimal = DICT_HT_INITIAL_SIZE;
@@ -152,6 +154,7 @@ int dictExpand(dict *d, unsigned long size)
         return DICT_ERR;
 
     dictht n; /* the new hash table */
+    //size的大小以2倍递增，
     unsigned long realsize = _dictNextPower(size);
 
     /* Rehashing to the same table size is not useful. */
@@ -159,6 +162,7 @@ int dictExpand(dict *d, unsigned long size)
 
     /* Allocate the new hash table and initialize all pointers to NULL */
     n.size = realsize;
+    //sizemask和size的关系
     n.sizemask = realsize-1;
     n.table = zcalloc(realsize*sizeof(dictEntry*));
     n.used = 0;
@@ -171,6 +175,7 @@ int dictExpand(dict *d, unsigned long size)
     }
 
     /* Prepare a second hash table for incremental rehashing */
+    //并不会立马替换ht0 和 ht1
     d->ht[1] = n;
     d->rehashidx = 0;
     return DICT_OK;
@@ -189,7 +194,7 @@ int dictRehash(dict *d, int n) {
     int empty_visits = n*10; /* Max number of empty buckets to visit. */
     if (!dictIsRehashing(d)) return 0;
 
-    //n表示执行rehash的几次循环，每次都是对hash表中的一个节点进行rehash，当然这由于hash冲突这个节点可能是一个链表
+    //n表示执行rehash几次循环，每次都是对hash表中的一个节点进行rehash，当然这由于hash冲突这个节点可能是一个链表
     //同时，如果hash表比较稀疏，容易碰到特别多空节点，这里还对每次rehash碰到的空节点的数做了限制，即10*n, 如果
     //碰到了这个多个空节点，那也是会中断rehash过程
     while(n-- && d->ht[0].used != 0) {
@@ -247,6 +252,7 @@ int dictRehashMilliseconds(dict *d, int ms) {
     long long start = timeInMilliseconds();
     int rehashes = 0;
 
+    //每次对hash table表的100个bucket进行判断，直到时间超过预设的值
     while(dictRehash(d,100)) {
         rehashes += 100;
         if (timeInMilliseconds()-start > ms) break;

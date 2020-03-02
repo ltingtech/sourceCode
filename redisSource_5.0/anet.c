@@ -58,22 +58,25 @@ static void anetSetError(char *err, const char *fmt, ...)
     va_end(ap);
 }
 
+// 设置文件文阻塞/非阻塞， 通过参数non_block参数控制设置成什么
+//文件的阻塞/非阻塞标志表示是否需要等待该文件完成IO才返回
 int anetSetBlock(char *err, int fd, int non_block) {
     int flags;
 
     /* Set the socket blocking (if non_block is zero) or non-blocking.
      * Note that fcntl(2) for F_GETFL and F_SETFL can't be
      * interrupted by a signal. */
+    //设置文件的标志位，需要先获取文件现有的标志
     if ((flags = fcntl(fd, F_GETFL)) == -1) {
         anetSetError(err, "fcntl(F_GETFL): %s", strerror(errno));
         return ANET_ERR;
     }
-
+    //修改文件的标志，增加阻塞标志或去除阻塞标志
     if (non_block)
         flags |= O_NONBLOCK;
     else
         flags &= ~O_NONBLOCK;
-
+    //将新的文件标志位存入文件中
     if (fcntl(fd, F_SETFL, flags) == -1) {
         anetSetError(err, "fcntl(F_SETFL,O_NONBLOCK): %s", strerror(errno));
         return ANET_ERR;
@@ -533,6 +536,13 @@ static int anetGenericAccept(char *err, int s, struct sockaddr *sa, socklen_t *l
     int fd;
     while(1) {
         //第一个参数是服务端的socket描述符，返回的是建立的连接的描述符
+        /**
+         * accept函数
+         * addr用于存放客户端的地址，addrlen在调用函数时被设置为addr指向区域的长度，在函数调用结束后被设置为实际地址信息的长度。
+         * 本函数会阻塞等待知道有客户端请求到达。
+            返回值是一个新的套接字描述符，它代表的是和客户端的新的连接，可以把它理解成是一个客户端的socket,这个socket包含的是客户端的ip和port信息 。
+            （当然这个new_socket会从sockfd中继承 服务器的ip和port信息，两种都有了），而参数中的SOCKET   s包含的是服务器的ip和port信息 。
+         **/
         fd = accept(s,sa,len);
         if (fd == -1) {
             if (errno == EINTR)
@@ -557,6 +567,7 @@ int anetTcpAccept(char *err, int s, char *ip, size_t ip_len, int *port) {
 
     if (sa.ss_family == AF_INET) {
         struct sockaddr_in *s = (struct sockaddr_in *)&sa;
+        //地址形式的转化，包括整数型表示和字符串形式表示（presentation / numeric）
         if (ip) inet_ntop(AF_INET,(void*)&(s->sin_addr),ip,ip_len);
         if (port) *port = ntohs(s->sin_port);
     } else {

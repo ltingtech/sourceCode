@@ -90,11 +90,17 @@ client *createClient(int fd) {
      * This is useful since all the commands needs to be executed
      * in the context of a client. When commands are executed in other
      * contexts (for instance a Lua script) we need a non connected client. */
+    /**
+     * 所有命令都需要在客户端上下文的概念中执行，如果有些命令如lua脚本，不需要客户端连接，则fd传入-1来处理这种情况
+     **/
     if (fd != -1) {
+        //设置句柄为非阻塞标志
         anetNonBlock(NULL,fd);
+        //将nodelay设置为1，这样就禁用了nagile算法，也就是数据会马上发送出去
         anetEnableTcpNoDelay(NULL,fd);
         if (server.tcpkeepalive)
             anetKeepAlive(NULL,fd,server.tcpkeepalive);
+        //又添加一个可读事件，这事件监听的句柄是server和client之间建立的连接句柄
         if (aeCreateFileEvent(server.el,fd,AE_READABLE,
             readQueryFromClient, c) == AE_ERR)
         {
@@ -104,6 +110,7 @@ client *createClient(int fd) {
         }
     }
 
+    //直接选用第一个db，不会随便选吗
     selectDb(c,0);
     uint64_t client_id;
     atomicGetIncr(server.next_client_id,client_id,1);
@@ -156,6 +163,7 @@ client *createClient(int fd) {
     c->client_list_node = NULL;
     listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
+    //将新的client放在server->clients链表上
     if (fd != -1) linkClient(c);
     initClientMultiState(c);
     return c;
@@ -663,6 +671,7 @@ int clientHasPendingReplies(client *c) {
 #define MAX_ACCEPTS_PER_CALL 1000
 static void acceptCommonHandler(int fd, int flags, char *ip) {
     client *c;
+    //创建一个client对象，创建完成后会放在server->clients链表上
     if ((c = createClient(fd)) == NULL) {
         serverLog(LL_WARNING,
             "Error registering fd event for the new client: %s (fd=%d)",
@@ -682,6 +691,8 @@ static void acceptCommonHandler(int fd, int flags, char *ip) {
             /* Nothing to do, Just to avoid the warning... */
         }
         server.stat_rejected_conn++;
+        //如果连接数过多，redis会拒绝当前连接，但是它是先把连接建立起来，如果连接数过多，在释放，
+        //这样做的原因是可以在释放之前将警告信息发送给客户端，让客户端感知到原因
         freeClient(c);
         return;
     }
@@ -740,6 +751,7 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     UNUSED(mask);
     UNUSED(privdata);
 
+    //为什么每一次可读事件触发，是直接读取1000个连接
     while(max--) {
         cfd = anetTcpAccept(server.neterr, fd, cip, sizeof(cip), &cport);
         if (cfd == ANET_ERR) {
@@ -749,6 +761,7 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
             return;
         }
         serverLog(LL_VERBOSE,"Accepted %s:%d", cip, cport);
+        //tcp连接建立后读取命令，并处理命令
         acceptCommonHandler(cfd,0,cip);
     }
 }
@@ -1517,6 +1530,7 @@ void processInputBufferAndReplicate(client *c) {
     }
 }
 
+//当server与client连接上有数据可读时的处理办法
 void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
     client *c = (client*) privdata;
     int nread, readlen;
@@ -1524,6 +1538,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
     UNUSED(el);
     UNUSED(mask);
 
+    //2kbyte的缓冲长度？
     readlen = PROTO_IOBUF_LEN;
     /* If this is a multi bulk request, and we are processing a bulk reply
      * that is large enough, try to maximize the probability that the query

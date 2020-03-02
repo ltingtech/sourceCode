@@ -149,6 +149,12 @@ typedef long long ustime_t; /* microsecond time type. */
 #define CONFIG_DEFAULT_RDB_SAVE_INCREMENTAL_FSYNC 1
 #define CONFIG_DEFAULT_MIN_SLAVES_TO_WRITE 0
 #define CONFIG_DEFAULT_MIN_SLAVES_MAX_LAG 10
+/**
+ * 为了实现IPv4-IPv6互通，IPv4地址会嵌入IPv6地址中，此时地址常表示X:X:X:X:X:X:d.d.d.d，
+
+前96位采用冒分十六进制表示，而最后32位地址则使用IPv4的点分十进制表示，在前96位中，压缩0位的方法依旧适用。
+所以长度为6*4 + 4* 3 + 9 + 1 = 46
+*/
 #define NET_IP_STR_LEN 46 /* INET6_ADDRSTRLEN is 46, but we need to be sure */
 #define NET_PEER_ID_LEN (NET_IP_STR_LEN+32) /* Must be enough for ip:port */
 #define CONFIG_BINDADDR_MAX 16

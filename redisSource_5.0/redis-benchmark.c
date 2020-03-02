@@ -112,6 +112,7 @@ static long long ustime(void) {
     return ust;
 }
 
+//返回毫秒级时间
 static long long mstime(void) {
     struct timeval tv;
     long long mst;

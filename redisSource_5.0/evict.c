@@ -67,6 +67,13 @@ static struct evictionPoolEntry *EvictionPoolLRU;
 /* Return the LRU clock, based on the clock resolution. This is a time
  * in a reduced-bits format that can be used to set and check the
  * object->lru field of redisObject structures. */
+/**
+ * redisz中的记录lru的时间（即对对象的最近使用时间）并不是直接用时间戳记录的，而是引入分辨率的概念（默认为1s）,
+ * 也就是说记录lru的时间时并不是直接记录说某个对象有XXX秒没被访问了，而是记录有N个分辨率的时间长度没有被访问了，这样可以通过
+ * 调节分辨率，用于控制lru比较时的时间粒度（按秒/毫秒这样的粒度比较）
+ *
+ * */
+// 引入分辨率后，lru的计数不会一直递增，当大于LRU_CLOCK_MAX时，会从头计算
 unsigned int getLRUClock(void) {
     return (mstime()/LRU_CLOCK_RESOLUTION) & LRU_CLOCK_MAX;
 }
