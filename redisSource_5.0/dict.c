@@ -267,7 +267,7 @@ int dictRehashMilliseconds(dict *d, int ms) {
  *
  * This function is called by common lookup or update operations in the
  * dictionary so that the hash table automatically migrates from H1 to H2
- * while it is actively used. */
+* while it is actively used. */
 static void _dictRehashStep(dict *d) {
     //iterators是怎么维护的，什么时候会改动该值
     if (d->iterators == 0) dictRehash(d,1);
@@ -277,7 +277,7 @@ static void _dictRehashStep(dict *d) {
 int dictAdd(dict *d, void *key, void *val)
 {
     dictEntry *entry = dictAddRaw(d,key,NULL);
-
+    //如果已经存在，则返回错误？
     if (!entry) return DICT_ERR;
     dictSetVal(d, entry, val);
     return DICT_OK;
@@ -311,6 +311,7 @@ dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing)
 
     /* Get the index of the new element, or -1 if
      * the element already exists. */
+    //先往hash表中增加一个val为null的元素节点，然后在下面给他赋值
     if ((index = _dictKeyIndex(d, key, dictHashKey(d,key), existing)) == -1)
         return NULL;
 
@@ -364,6 +365,7 @@ int dictReplace(dict *d, void *key, void *val)
  * existing key is returned.)
  *
  * See dictAddRaw() for more information. */
+//如果不存在则新增，否则返回已经存在的元素
 dictEntry *dictAddOrFind(dict *d, void *key) {
     dictEntry *entry, *existing;
     entry = dictAddRaw(d,key,&existing);
@@ -379,8 +381,9 @@ static dictEntry *dictGenericDelete(dict *d, const void *key, int nofree) {
     int table;
 
     if (d->ht[0].used == 0 && d->ht[1].used == 0) return NULL;
-
+    //每次删除元素的时候也会执行一步rehash，如果当前正在进行rehashing过程的话
     if (dictIsRehashing(d)) _dictRehashStep(d);
+    //确定hash节点索引
     h = dictHashKey(d, key);
 
     for (table = 0; table <= 1; table++) {
@@ -405,6 +408,7 @@ static dictEntry *dictGenericDelete(dict *d, const void *key, int nofree) {
             prevHe = he;
             he = he->next;
         }
+        //如果当前不在rehashing的过程中，就没必要考虑第二个hash表了，因为所有数据都是存放在第一个hash表中
         if (!dictIsRehashing(d)) break;
     }
     return NULL; /* not found */
@@ -437,6 +441,7 @@ int dictDelete(dict *ht, const void *key) {
  * // Do something with entry
  * dictFreeUnlinkedEntry(entry); // <- This does not need to lookup again.
  */
+//如果既想删除一个节点，又想在删除之前使用这个节点的值，则调用这个函数，这个函数应该配合下面的dictFreeUnlinkedEntry()函数进行
 dictEntry *dictUnlink(dict *ht, const void *key) {
     return dictGenericDelete(ht,key,1);
 }
@@ -485,6 +490,9 @@ void dictRelease(dict *d)
     zfree(d);
 }
 
+/**
+ * 在一个hash表中高查找一个key
+ * */
 dictEntry *dictFind(dict *d, const void *key)
 {
     dictEntry *he;
@@ -519,6 +527,7 @@ void *dictFetchValue(dict *d, const void *key) {
  * the fingerprint again when the iterator is released.
  * If the two fingerprints are different it means that the user of the iterator
  * performed forbidden operations against the dictionary while iterating. */
+//很有意思的函数，生成hash表的指纹，原理是直接对hash表的若干个字段进行异或操作，得到一个指纹信息
 long long dictFingerprint(dict *d) {
     long long integers[6], hash = 0;
     int j;
@@ -571,6 +580,7 @@ dictIterator *dictGetSafeIterator(dict *d) {
     return i;
 }
 
+//遍历一个hash表， 先遍历hash表的节点，并在在遍历hash表节点时，还需要处理每个节点上hash冲突产生的链表
 dictEntry *dictNext(dictIterator *iter)
 {
     while (1) {
@@ -619,6 +629,7 @@ void dictReleaseIterator(dictIterator *iter)
 
 /* Return a random entry from the hash table. Useful to
  * implement randomized algorithms */
+//随机从hash表中选择一个key有什么用处
 dictEntry *dictGetRandomKey(dict *d)
 {
     dictEntry *he, *orighe;
@@ -626,7 +637,6 @@ dictEntry *dictGetRandomKey(dict *d)
     int listlen, listele;
 
     if (dictSize(d) == 0) return NULL;
-    //什么时候会发生再hash呢
     if (dictIsRehashing(d)) _dictRehashStep(d);
 
     //分两种情况，1）当前正在发生rehash， 2）当前没有发生rehash，
@@ -869,6 +879,7 @@ unsigned long dictScan(dict *d,
         m0 = t0->sizemask;
 
         /* Emit entries at cursor */
+        //对一个bucket处理
         if (bucketfn) bucketfn(privdata, &t0->table[v & m0]);
         de = t0->table[v & m0];
         while (de) {
@@ -879,6 +890,7 @@ unsigned long dictScan(dict *d,
 
         /* Set unmasked bits so incrementing the reversed cursor
          * operates on the masked bits */
+        //将v的高位全部置为1，低位全部置为0
         v |= ~m0;
 
         /* Increment the reverse cursor */
