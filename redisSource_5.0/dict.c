@@ -884,6 +884,7 @@ unsigned long dictScan(dict *d,
         de = t0->table[v & m0];
         while (de) {
             next = de->next;
+            //对每一个entry进行遍历
             fn(privdata, de);
             de = next;
         }
@@ -891,12 +892,18 @@ unsigned long dictScan(dict *d,
         /* Set unmasked bits so incrementing the reversed cursor
          * operates on the masked bits */
         //将v的高位全部置为1，低位全部置为0
-        v |= ~m0;
+        //v == 0 ,也就是0000 0000 , m0是size == 8时的掩码，也就是0000 0111
+        v |= ~m0; //~m0按位取反，为1111 1000 , 跟v做或得到v的新值为  1111 1000
 
         /* Increment the reverse cursor */
+        
+        v = rev(v); //将V的每一位反过来，得到 0001 1111
+        //这个是关键，加1，注意其效果，得到0010 0000 , 什么意思呢？对一个数加1，
+        //其实就是将这个数的低位的连续1变为0，然后将最低的一个0变为1，其实就是将最低的一个0变为1
+        v++;  
+        //再次反过来，得到了：0000 0100  , 十进制就是4 
         v = rev(v);
-        v++;
-        v = rev(v);
+        //每次调用函数都是遍历一个bucket
 
     } else {
         t0 = &d->ht[0];
@@ -911,6 +918,8 @@ unsigned long dictScan(dict *d,
         m0 = t0->sizemask;
         m1 = t1->sizemask;
 
+        //很精妙的思想，交替访问小表和大表
+        //先访问小表bucket，假设为010
         /* Emit entries at cursor */
         if (bucketfn) bucketfn(privdata, &t0->table[v & m0]);
         de = t0->table[v & m0];
@@ -923,6 +932,7 @@ unsigned long dictScan(dict *d,
         /* Iterate over indices in larger table that are the expansion
          * of the index pointed to by the cursor in the smaller table */
         do {
+            //接着访问大表，由于m1和m0的区别，此时访问0010
             /* Emit entries at cursor */
             if (bucketfn) bucketfn(privdata, &t1->table[v & m1]);
             de = t1->table[v & m1];
@@ -937,9 +947,13 @@ unsigned long dictScan(dict *d,
             v = rev(v);
             v++;
             v = rev(v);
+            //经过一个变换，下一个bucket应该是1010
 
             /* Continue while bits covered by mask difference is non-zero */
+            //1010 仍旧可是判断条件成立
+            //内循环的第二次后变成0110，跳出内循环
         } while (v & (m0 ^ m1));
+        //此时dicScan的v=0110,  下一次调用dictScan 时从小表的110 bucket开始处理
     }
 
     return v;
