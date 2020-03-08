@@ -123,6 +123,7 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
     } else {
         /* Check for the case where we know we cannot find the value,
          * but do know the insert position. */
+        //content中的内容是从小到大有序存储的吗
         if (value > _intsetGet(is,max)) {
             if (pos) *pos = intrev32ifbe(is->length);
             return 0;
@@ -133,7 +134,9 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
     }
 
     while(max >= min) {
+        //利用位运算计算中间数
         mid = ((unsigned int)min + (unsigned int)max) >> 1;
+        //二分查找
         cur = _intsetGet(is,mid);
         if (value > cur) {
             min = mid+1;

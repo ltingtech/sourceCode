@@ -47,6 +47,7 @@ robj *createObject(int type, void *ptr) {
 
     /* Set the LRU to the current lruclock (minutes resolution), or
      * alternatively the LFU counter. */
+    //LFU 是怎么实现的
     if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
         o->lru = (LFUGetTimeInMinutes()<<8) | LFU_INIT_VAL;
     } else {
@@ -66,6 +67,7 @@ robj *createObject(int type, void *ptr) {
  * robj *myobject = makeObjectShared(createObject(...));
  *
  */
+// 将refcount设置成整数的最大值，这样就可以使其成为共享变量？
 robj *makeObjectShared(robj *o) {
     serverAssert(o->refcount == 1);
     o->refcount = OBJ_SHARED_REFCOUNT;
@@ -81,8 +83,11 @@ robj *createRawStringObject(const char *ptr, size_t len) {
 /* Create a string object with encoding OBJ_ENCODING_EMBSTR, that is
  * an object where the sds string is actually an unmodifiable string
  * allocated in the same chunk as the object itself. */
+//sds和string redisObject存储在同一个连续的内存块上
 robj *createEmbeddedStringObject(const char *ptr, size_t len) {
+    //申请空间时，包括字符串的存储空间都一次性分配了
     robj *o = zmalloc(sizeof(robj)+sizeof(struct sdshdr8)+len+1);
+    //为什么要+1
     struct sdshdr8 *sh = (void*)(o+1);
 
     o->type = OBJ_STRING;
@@ -99,6 +104,7 @@ robj *createEmbeddedStringObject(const char *ptr, size_t len) {
     sh->alloc = len;
     sh->flags = SDS_TYPE_8;
     if (ptr == SDS_NOINIT)
+        //空字符串？
         sh->buf[len] = '\0';
     else if (ptr) {
         memcpy(sh->buf,ptr,len);
@@ -115,6 +121,7 @@ robj *createEmbeddedStringObject(const char *ptr, size_t len) {
  *
  * The current limit of 44 is chosen so that the biggest string object
  * we allocate as EMBSTR will still fit into the 64 byte arena of jemalloc. */
+//embstr 编码的字符串的长度
 #define OBJ_ENCODING_EMBSTR_SIZE_LIMIT 44
 robj *createStringObject(const char *ptr, size_t len) {
     if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT)
@@ -134,6 +141,7 @@ robj *createStringObjectFromLongLongWithOptions(long long value, int valueobj) {
     robj *o;
 
     if (server.maxmemory == 0 ||
+        //MAXMEMORY_FLAG_NO_SHARED_INTEGERS 表示即没开启lru也没开启lfu内存回收策略
         !(server.maxmemory_policy & MAXMEMORY_FLAG_NO_SHARED_INTEGERS))
     {
         /* If the maxmemory policy permits, we can still return shared integers

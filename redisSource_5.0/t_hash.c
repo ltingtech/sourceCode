@@ -43,6 +43,7 @@ void hashTypeTryConversion(robj *o, robj **argv, int start, int end) {
     if (o->encoding != OBJ_ENCODING_ZIPLIST) return;
 
     for (i = start; i <= end; i++) {
+        //只检查字符串型的对象的长度
         if (sdsEncodedObject(argv[i]) &&
             sdslen(argv[i]->ptr) > server.hash_max_ziplist_value)
         {
@@ -67,9 +68,11 @@ int hashTypeGetFromZiplist(robj *o, sds field,
     zl = o->ptr;
     fptr = ziplistIndex(zl, ZIPLIST_HEAD);
     if (fptr != NULL) {
+        //先从ziplist上找到hash key 对应的节点元素
         fptr = ziplistFind(fptr, (unsigned char*)field, sdslen(field), 1);
         if (fptr != NULL) {
             /* Grab pointer to the value (fptr points to the field) */
+            //key的下一个节点存储的就是value
             vptr = ziplistNext(zl, fptr);
             serverAssert(vptr != NULL);
         }
@@ -106,6 +109,7 @@ sds hashTypeGetFromHashTable(robj *o, sds field) {
  * If *vll is populated *vstr is set to NULL, so the caller
  * can always check the function return by checking the return value
  * for C_OK and checking if vll (or vstr) is NULL. */
+//获取哈希结构的value， 可能从ziplist中获取，也可能从hashtable中获取
 int hashTypeGetValue(robj *o, sds field, unsigned char **vstr, unsigned int *vlen, long long *vll) {
     if (o->encoding == OBJ_ENCODING_ZIPLIST) {
         *vstr = NULL;
@@ -141,6 +145,7 @@ robj *hashTypeGetValueObject(robj *o, sds field) {
 /* Higher level function using hashTypeGet*() to return the length of the
  * object associated with the requested field, or 0 if the field does not
  * exist. */
+//从下一个
 size_t hashTypeGetValueLength(robj *o, sds field) {
     size_t len = 0;
     if (o->encoding == OBJ_ENCODING_ZIPLIST) {
@@ -350,6 +355,7 @@ int hashTypeNext(hashTypeIterator *hi) {
         unsigned char *zl;
         unsigned char *fptr, *vptr;
 
+        //subject存放的是robj对象
         zl = hi->subject->ptr;
         fptr = hi->fptr;
         vptr = hi->vptr;
@@ -357,6 +363,7 @@ int hashTypeNext(hashTypeIterator *hi) {
         if (fptr == NULL) {
             /* Initialize cursor */
             serverAssert(vptr == NULL);
+            //定位到第几个ziplist item
             fptr = ziplistIndex(zl, 0);
         } else {
             /* Advance cursor */
@@ -366,6 +373,7 @@ int hashTypeNext(hashTypeIterator *hi) {
         if (fptr == NULL) return C_ERR;
 
         /* Grab pointer to the value (fptr points to the field) */
+        // ziplist的迭代器存有两个ziplist元素的指针，主要是考虑到hash以ziplist编码时，遍历哈希总是以key:value对的成对形式出现，
         vptr = ziplistNext(zl, fptr);
         serverAssert(vptr != NULL);
 
@@ -382,6 +390,7 @@ int hashTypeNext(hashTypeIterator *hi) {
 
 /* Get the field or value at iterator cursor, for an iterator on a hash value
  * encoded as a ziplist. Prototype is similar to `hashTypeGetFromZiplist`. */
+//根据一个底层由ziplist编码的hash结构的迭代器，返回当前哈希元素的key or value
 void hashTypeCurrentFromZiplist(hashTypeIterator *hi, int what,
                                 unsigned char **vstr,
                                 unsigned int *vlen,
@@ -462,6 +471,7 @@ robj *hashTypeLookupWriteOrCreate(client *c, robj *key) {
     return o;
 }
 
+//将哈希对象的ziplist编码转化为hashtable
 void hashTypeConvertZiplist(robj *o, int enc) {
     serverAssert(o->encoding == OBJ_ENCODING_ZIPLIST);
 
@@ -474,6 +484,7 @@ void hashTypeConvertZiplist(robj *o, int enc) {
         int ret;
 
         hi = hashTypeInitIterator(o);
+        //构造一个hash
         dict = dictCreate(&hashDictType, NULL);
 
         while (hashTypeNext(hi) != C_ERR) {

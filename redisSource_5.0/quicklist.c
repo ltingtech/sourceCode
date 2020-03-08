@@ -91,6 +91,8 @@ static const size_t optimization_level[] = {4096, 8192, 16384, 32768, 65536};
 
 /* Create a new quicklist.
  * Free with quicklistRelease(). */
+//quicklist结构
+
 quicklist *quicklistCreate(void) {
     struct quicklist *quicklist;
 

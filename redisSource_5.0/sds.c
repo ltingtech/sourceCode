@@ -84,25 +84,29 @@ static inline char sdsReqType(size_t string_size) {
  * mystring = sdsnewlen("abc",3);
  *
  * You can print the string with printf() as there is an implicit \0 at the
- * end of the string. However the string is binary safe and can contain
+ * end of the string. However the string is binary safe（二进制安全的） and can contain
  * \0 characters in the middle, as the length is stored in the sds header. */
+//由于是根据len字段决定字符串的长度的，而不是简单的以\0作为结尾标记，所以是二进制安全的
 sds sdsnewlen(const void *init, size_t initlen) {
     void *sh;
     sds s;
+    //根据字符串的长度，决定使用什么类型
     char type = sdsReqType(initlen);
     /* Empty strings are usually created in order to append. Use type 8
      * since type 5 is not good at this. */
     if (type == SDS_TYPE_5 && initlen == 0) type = SDS_TYPE_8;
     int hdrlen = sdsHdrSize(type);
     unsigned char *fp; /* flags pointer. */
-
+    //+1是因为需要给字符串预留一个\0结束符标记
     sh = s_malloc(hdrlen+initlen+1);
     if (init==SDS_NOINIT)
         init = NULL;
     else if (!init)
         memset(sh, 0, hdrlen+initlen+1);
     if (sh == NULL) return NULL;
+    //s指向真正存储内容的地址指针
     s = (char*)sh+hdrlen;
+    //标记位
     fp = ((unsigned char*)s)-1;
     switch(type) {
         case SDS_TYPE_5: {
@@ -212,8 +216,10 @@ sds sdsMakeRoomFor(sds s, size_t addlen) {
     if (avail >= addlen) return s;
 
     len = sdslen(s);
+    //sdshdr结构体的起始位置
     sh = (char*)s-sdsHdrSize(oldtype);
     newlen = (len+addlen);
+    //每次开辟空间的策略
     if (newlen < SDS_MAX_PREALLOC)
         newlen *= 2;
     else
@@ -324,12 +330,15 @@ void *sdsAllocPtr(sds s) {
  * following schema, to cat bytes coming from the kernel to the end of an
  * sds string without copying into an intermediate buffer:
  *
+ * //使用实例
  * oldlen = sdslen(s);
+ * //sds的读取可以直接存内核内存中读取，而不用先把内容读取到中间缓存，然后在写到sds中
  * s = sdsMakeRoomFor(s, BUFFER_SIZE);
  * nread = read(fd, s+oldlen, BUFFER_SIZE);
  * ... check for nread <= 0 and handle it ...
  * sdsIncrLen(s, nread);
  */
+//修改sds的len字段的值
 void sdsIncrLen(sds s, ssize_t incr) {
     unsigned char flags = s[-1];
     size_t len;
@@ -343,6 +352,7 @@ void sdsIncrLen(sds s, ssize_t incr) {
             break;
         }
         case SDS_TYPE_8: {
+            //SDS_HDR_VAR 内部已经生成了一个变量sh，表示sdshr结构体的起始地址
             SDS_HDR_VAR(8,s);
             assert((incr >= 0 && sh->alloc-sh->len >= incr) || (incr < 0 && sh->len >= (unsigned int)(-incr)));
             len = (sh->len += incr);
@@ -452,6 +462,7 @@ int sdsll2str(char *s, long long value) {
     unsigned long long v;
     size_t l;
 
+    //将数字转为为一个字符串表示
     /* Generate the string representation, this method produces
      * an reversed string. */
     v = (value < 0) ? -value : value;

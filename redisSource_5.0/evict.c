@@ -37,13 +37,14 @@
 /* ----------------------------------------------------------------------------
  * Data structures
  * --------------------------------------------------------------------------*/
-
+//近似的LRU算法
 /* To improve the quality of the LRU approximation we take a set of keys
  * that are good candidate for eviction across freeMemoryIfNeeded() calls.
  *
  * Entries inside the eviciton pool are taken ordered by idle time, putting
  * greater idle times to the right (ascending order).
  *
+ * //LFU算法，则存的是频率的反向指标，即数值越大，则说明使用越不频繁
  * When an LFU policy is used instead, a reverse frequency indication is used
  * instead of the idle time, so that we still evict by larger value (larger
  * inverse frequency means to evict keys with the least frequent accesses).
@@ -68,7 +69,7 @@ static struct evictionPoolEntry *EvictionPoolLRU;
  * in a reduced-bits format that can be used to set and check the
  * object->lru field of redisObject structures. */
 /**
- * redisz中的记录lru的时间（即对对象的最近使用时间）并不是直接用时间戳记录的，而是引入分辨率的概念（默认为1s）,
+ * redis中的记录lru的时间（即对对象的最近使用时间）并不是直接用时间戳记录的，而是引入分辨率的概念（默认为1s）,
  * 也就是说记录lru的时间时并不是直接记录说某个对象有XXX秒没被访问了，而是记录有N个分辨率的时间长度没有被访问了，这样可以通过
  * 调节分辨率，用于控制lru比较时的时间粒度（按秒/毫秒这样的粒度比较）
  *
@@ -94,6 +95,7 @@ unsigned int LRU_CLOCK(void) {
 
 /* Given an object returns the min number of milliseconds the object was never
  * requested, using an approximated LRU algorithm. */
+//由于lruclock是循环使用的，所以这里计算的闲置时间也是近似的，并不准确
 unsigned long long estimateObjectIdleTime(robj *o) {
     unsigned long long lruclock = LRU_CLOCK();
     if (lruclock >= o->lru) {
@@ -162,7 +164,7 @@ void evictionPoolAlloc(void) {
  * expire a key. Keys with idle time smaller than one of the current
  * keys are added. Keys are always added if there are free entries.
  *
- * We insert keys on place in ascending order, so keys with the smaller
+ * We insert keys on place in ascending（降序） order, so keys with the smaller
  * idle time are on the left, and keys with the higher idle time on the
  * right. */
 

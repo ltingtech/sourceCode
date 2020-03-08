@@ -139,8 +139,10 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
     for (i = zsl->level-1; i >= 0; i--) {
         /* store rank that is crossed to reach the insert position */
         rank[i] = i == (zsl->level-1) ? 0 : rank[i+1];
+        //找到当前层第一个小于参数score的节点
         while (x->level[i].forward &&
                 (x->level[i].forward->score < score ||
+                    //如果score相同则，比较内容的大小
                     (x->level[i].forward->score == score &&
                     sdscmp(x->level[i].forward->ele,ele) < 0)))
         {
@@ -153,6 +155,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
      * scores, reinserting the same element should never happen since the
      * caller of zslInsert() should test in the hash table if the element is
      * already inside or not. */
+    //有一个hashtable，用来控制当前节点是否已经在zset中
     level = zslRandomLevel();
     if (level > zsl->level) {
         for (i = zsl->level; i < level; i++) {
@@ -162,6 +165,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
         }
         zsl->level = level;
     }
+    //插入新的节点
     x = zslCreateNode(level,score,ele);
     for (i = 0; i < level; i++) {
         x->level[i].forward = update[i]->level[i].forward;
@@ -287,7 +291,7 @@ zskiplistNode *zslUpdateScore(zskiplist *zsl, double curscore, sds ele, double n
         x->score = newscore;
         return x;
     }
-
+    //先删除一个节点，然后在新的地方插入一个新的节点
     /* No way to reuse the old node: we need to remove and insert a new
      * one at a different place. */
     zslDeleteNode(zsl, x, update);
@@ -1172,6 +1176,8 @@ void zsetConvert(robj *zobj, int encoding) {
     double score;
 
     if (zobj->encoding == encoding) return;
+
+    //将zset编码从ziplist转化为skiplist
     if (zobj->encoding == OBJ_ENCODING_ZIPLIST) {
         unsigned char *zl = zobj->ptr;
         unsigned char *eptr, *sptr;
@@ -1259,6 +1265,7 @@ int zsetScore(robj *zobj, sds member, double *score) {
         if (zzlFind(zobj->ptr, member, score) == NULL) return C_ERR;
     } else if (zobj->encoding == OBJ_ENCODING_SKIPLIST) {
         zset *zs = zobj->ptr;
+        //如果使用skiplist编码，那么score是直接从内部的hash表里面拿到的
         dictEntry *de = dictFind(zs->dict, member);
         if (de == NULL) return C_ERR;
         *score = *(double*)dictGetVal(de);
@@ -1371,7 +1378,7 @@ int zsetAdd(robj *zobj, double score, sds ele, int *flags, double *newscore) {
         zset *zs = zobj->ptr;
         zskiplistNode *znode;
         dictEntry *de;
-
+        //直接从hash表中判断当前节点是否在zset中
         de = dictFind(zs->dict,ele);
         if (de != NULL) {
             /* NX? Return, same element already exists. */

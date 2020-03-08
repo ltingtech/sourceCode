@@ -681,6 +681,7 @@ dictEntry *dictGetRandomKey(dict *d)
  * It does not guarantee to return all the keys specified in 'count', nor
  * it does guarantee to return non-duplicated elements, however it will make
  * some effort to do both things.
+ * 不保证每次能抽样到count个元素，也不保证抽样的元素不会重复
  *
  * Returned pointers to hash table entries are stored into 'des' that
  * points to an array of dictEntry pointers. The array must have room for
@@ -704,9 +705,11 @@ unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count) {
     unsigned long maxsteps;
 
     if (dictSize(d) < count) count = dictSize(d);
+    //最多进行count * 10 次抽样
     maxsteps = count*10;
 
     /* Try to do a rehashing work proportional to 'count'. */
+    //为什么要进行这么多步，执行一步rehash不够吗
     for (j = 0; j < count; j++) {
         if (dictIsRehashing(d))
             _dictRehashStep(d);
@@ -716,6 +719,7 @@ unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count) {
 
     tables = dictIsRehashing(d) ? 2 : 1;
     maxsizemask = d->ht[0].sizemask;
+    //如果正在发生哈希重构，那就会从两张哈希表中选择大的一个
     if (tables > 1 && maxsizemask < d->ht[1].sizemask)
         maxsizemask = d->ht[1].sizemask;
 

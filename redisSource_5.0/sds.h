@@ -48,11 +48,13 @@ struct __attribute__ ((__packed__)) sdshdr5 {
     unsigned char flags; /* 3 lsb of type, and 5 msb of string length */
     char buf[];
 };
+//attribute ((packed))，这一段代码的作用是取消编译阶段的内存优化对齐功能。
+//sds的这些类型的区别字符串长度不同
 struct __attribute__ ((__packed__)) sdshdr8 {
     uint8_t len; /* used */
-    uint8_t alloc; /* excluding the header and null terminator */
-    unsigned char flags; /* 3 lsb of type, 5 unused bits */
-    char buf[];
+    uint8_t alloc; /* excluding the header and null terminator */ //分配的内存大小，不包括尾部结尾空字符
+    unsigned char flags; /* 3 lsb of type, 5 unused bits */  //flag的低三位表示sds的类型
+    char buf[]; //buf是实际存放字符串的地方，据说不占用空间
 };
 struct __attribute__ ((__packed__)) sdshdr16 {
     uint16_t len; /* used */
@@ -78,14 +80,19 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 #define SDS_TYPE_16 2
 #define SDS_TYPE_32 3
 #define SDS_TYPE_64 4
-#define SDS_TYPE_MASK 7
+#define SDS_TYPE_MASK 7   //由于sds的类型是根据flag的低3位决定的，所以掩码是7
 #define SDS_TYPE_BITS 3
+//通过一个已存在的sds变量的首地址减去这个结构体本身的所占内存的字节大小来得到该结构体的首地址(因为头结构体和sds变量的内存的地址是连续的
+//？？这里说的sds变量的首地址难道是指结构体中实际存放数据的buff的首地址？
 #define SDS_HDR_VAR(T,s) struct sdshdr##T *sh = (void*)((s)-(sizeof(struct sdshdr##T)));
+// SDS_HDR 与SDS_HDR_VAR的区别是前者直接返回一个指针，后者返回一个指针变量
 #define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
 #define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
 
+//sds 是char*  的别名，其实就是指向一个字符串的指针
 static inline size_t sdslen(const sds s) {
     unsigned char flags = s[-1];
+    //
     switch(flags&SDS_TYPE_MASK) {
         case SDS_TYPE_5:
             return SDS_TYPE_5_LEN(flags);
