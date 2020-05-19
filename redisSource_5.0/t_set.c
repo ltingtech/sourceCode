@@ -966,7 +966,7 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
 
         for (j = 0; j < setnum; j++) {
             if (sets[j] == NULL) continue;
-
+            //比较两种求
             algo_one_work += setTypeSize(sets[0]);
             algo_two_work += setTypeSize(sets[j]);
         }

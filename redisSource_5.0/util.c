@@ -357,6 +357,7 @@ int ll2string(char *dst, size_t dstlen, long long svalue) {
  * Because of its strictness, it is safe to use this function to check if
  * you can convert a string into a long long, and obtain back the string
  * from the number without any loss in the string representation. */
+//检查一个字符串是否可以转为为一个整数
 int string2ll(const char *s, size_t slen, long long *value) {
     const char *p = s;
     size_t plen = 0;
@@ -398,6 +399,7 @@ int string2ll(const char *s, size_t slen, long long *value) {
             return 0;
         v *= 10;
 
+        // 这个写法很重要，千万不能写成 v + p[0]-'0' > ULLONG_MAX
         if (v > (ULLONG_MAX - (p[0]-'0'))) /* Overflow. */
             return 0;
         v += p[0]-'0';
@@ -412,6 +414,7 @@ int string2ll(const char *s, size_t slen, long long *value) {
     /* Convert to negative if needed, and do the final overflow check when
      * converting from unsigned long long to long long. */
     if (negative) {
+        //在进行校验一次
         if (v > ((unsigned long long)(-(LLONG_MIN+1))+1)) /* Overflow. */
             return 0;
         if (value != NULL) *value = -v;

@@ -479,7 +479,7 @@ robj *tryObjectEncoding(robj *o) {
             if (o->encoding == OBJ_ENCODING_RAW) {
                 sdsfree(o->ptr);
                 o->encoding = OBJ_ENCODING_INT;
-                o->ptr = (void*) value; //ptr存放是整数的地址
+                o->ptr = (void*) value; //ptr存放是整数，不是地址
                 return o;
             } else if (o->encoding == OBJ_ENCODING_EMBSTR) {
                 decrRefCount(o);
