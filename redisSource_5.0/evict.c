@@ -168,6 +168,9 @@ void evictionPoolAlloc(void) {
  * idle time are on the left, and keys with the higher idle time on the
  * right. */
 
+/**
+ * 抽取一批key,  然后按照他们的lru指标进行排序
+ * */
 void evictionPoolPopulate(int dbid, dict *sampledict, dict *keydict, struct evictionPoolEntry *pool) {
     int j, k, count;
     dictEntry *samples[server.maxmemory_samples];
@@ -185,6 +188,7 @@ void evictionPoolPopulate(int dbid, dict *sampledict, dict *keydict, struct evic
         /* If the dictionary we are sampling from is not the main
          * dictionary (but the expires one) we need to lookup the key
          * again in the key dictionary to obtain the value object. */
+        //MAXMEMORY_VOLATILE_TTL在设置了过期时间的key中淘汰即将过期的key
         if (server.maxmemory_policy != MAXMEMORY_VOLATILE_TTL) {
             if (sampledict != keydict) de = dictFind(keydict, key);
             o = dictGetVal(de);
@@ -193,6 +197,7 @@ void evictionPoolPopulate(int dbid, dict *sampledict, dict *keydict, struct evic
         /* Calculate the idle time according to the policy. This is called
          * idle just because the code initially handled LRU, but is in fact
          * just a score where an higher score means better candidate. */
+        //这里说的idle只是表示不同回收策略下的一个指标，并不是真正表示空闲时间
         if (server.maxmemory_policy & MAXMEMORY_FLAG_LRU) {
             idle = estimateObjectIdleTime(o);
         } else if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
@@ -233,6 +238,7 @@ void evictionPoolPopulate(int dbid, dict *sampledict, dict *keydict, struct evic
 
                 /* Save SDS before overwriting. */
                 sds cached = pool[EVPOOL_SIZE-1].cached;
+                //内存移动
                 memmove(pool+k+1,pool+k,
                     sizeof(pool[0])*(EVPOOL_SIZE-k-1));
                 pool[k].cached = cached;
@@ -321,6 +327,7 @@ unsigned long LFUTimeElapsed(unsigned long ldt) {
 
 /* Logarithmically increment a counter. The greater is the current counter value
  * the less likely is that it gets really implemented. Saturate it at 255. */
+//也是按照一定概率去增加counter,如果当前couter小于5，才一定会递增counter
 uint8_t LFULogIncr(uint8_t counter) {
     if (counter == 255) return 255;
     double r = (double)rand()/RAND_MAX;
@@ -342,6 +349,8 @@ uint8_t LFULogIncr(uint8_t counter) {
  * to fit: as we check for the candidate, we incrementally decrement the
  * counter of the scanned objects if needed. */
 unsigned long LFUDecrAndReturn(robj *o) {
+    //采用lfu算法时，lru中低8位存counter,高16位存上次使用的时间
+    //每次计算时，都是递减counter，
     unsigned long ldt = o->lru >> 8;
     unsigned long counter = o->lru & 255;
     unsigned long num_periods = server.lfu_decay_time ? LFUTimeElapsed(ldt) / server.lfu_decay_time : 0;
@@ -497,9 +506,11 @@ int freeMemoryIfNeeded(void) {
                  * every DB. */
                 for (i = 0; i < server.dbnum; i++) {
                     db = server.db+i;
+                    //决定采样的源头是所有的key, 还是设置了过期时期间的key
                     dict = (server.maxmemory_policy & MAXMEMORY_FLAG_ALLKEYS) ?
                             db->dict : db->expires;
                     if ((keys = dictSize(dict)) != 0) {
+                        //每次回收都是重新采样
                         evictionPoolPopulate(i, dict, db->dict, pool);
                         total_keys += keys;
                     }
@@ -508,6 +519,7 @@ int freeMemoryIfNeeded(void) {
 
                 /* Go backward from best to worst element to evict. */
                 for (k = EVPOOL_SIZE-1; k >= 0; k--) {
+                    //从回收池的从右到左进行回收
                     if (pool[k].key == NULL) continue;
                     bestdbid = pool[k].dbid;
 
@@ -538,6 +550,7 @@ int freeMemoryIfNeeded(void) {
         }
 
         /* volatile-random and allkeys-random policy */
+        //如果是随机策略，就不需要构造回收池了
         else if (server.maxmemory_policy == MAXMEMORY_ALLKEYS_RANDOM ||
                  server.maxmemory_policy == MAXMEMORY_VOLATILE_RANDOM)
         {

@@ -1515,6 +1515,7 @@ void processInputBuffer(client *c) {
  * the replication forwarding to the sub-slaves, in case the client 'c'
  * is flagged as master. Usually you want to call this instead of the
  * raw processInputBuffer(). */
+//没看懂注释
 void processInputBufferAndReplicate(client *c) {
     if (!(c->flags & CLIENT_MASTER)) {
         processInputBuffer(c);
@@ -1538,7 +1539,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
     UNUSED(el);
     UNUSED(mask);
 
-    //2kbyte的缓冲长度？
+    //16kbyte的缓冲长度？
     readlen = PROTO_IOBUF_LEN;
     /* If this is a multi bulk request, and we are processing a bulk reply
      * that is large enough, try to maximize the probability that the query
@@ -1601,6 +1602,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
      * was actually applied to the master state: this quantity, and its
      * corresponding part of the replication stream, will be propagated to
      * the sub-slaves and to the replication backlog. */
+    //处理命令
     processInputBufferAndReplicate(c);
 }
 

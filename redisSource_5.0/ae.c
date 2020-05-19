@@ -431,6 +431,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 
         /* Call the multiplexing API, will return only on timeout or when
          * some event fires. */
+        //tvp表示的是等待超时时间，这个值是根据时间事件计算来的，保证不会由于epoll等待而耽误时间事件的执行
         numevents = aeApiPoll(eventLoop, tvp);
 
         /* After sleep callback. */

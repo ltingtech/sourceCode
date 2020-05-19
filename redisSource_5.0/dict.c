@@ -223,6 +223,7 @@ int dictRehash(dict *d, int n) {
             d->ht[1].used++;
             de = nextde;
         }
+        //完成后旧hashtable的旧bucket就置为空了
         d->ht[0].table[d->rehashidx] = NULL;
         d->rehashidx++;
     }
@@ -731,14 +732,21 @@ unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count) {
             /* Invariant of the dict.c rehashing: up to the indexes already
              * visited in ht[0] during the rehashing, there are no populated
              * buckets, so we can skip ht[0] for indexes between 0 and idx-1. */
+            //如果当前正在发生rehash，且还在扫描第一张哈希表，且遍历的bucket已经完成rehash了
             if (tables == 2 && j == 0 && i < (unsigned long) d->rehashidx) {
                 /* Moreover, if we are currently out of range in the second
                  * table, there will be no elements in both tables up to
                  * the current rehashing index, so we jump if possible.
                  * (this happens when going from big to small table). */
+                //rehash过程中，旧hashtable中索引0-rehashidx 的bucket已经完成rehash了，对应的bucket就变成null了
+                //没明白这个含义
                 if (i >= d->ht[1].size)
+                    //对于这种情况，进退两难，1）老表上当前bucket已经是NULL了，不能使用，但是如果也不能映射到新表上，因为本来在
+                    //i < d->ht[1].size 的时候取新表了，如果此时重新映射到新表，则更容易采样到重复元素，
+                    //这里的这种方法是直接指定这种情况下去取老表的rehashidx对应的bucket，重复就是这种情况下导致的
                     i = d->rehashidx;
                 else
+                    //已经rehash过的bucket就直接去新的hash表中找，不用考虑老表里面的了
                     continue;
             }
             if (i >= d->ht[j].size) continue; /* Out of range for this table. */
@@ -753,6 +761,7 @@ unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count) {
                     emptylen = 0;
                 }
             } else {
+                //连续的空
                 emptylen = 0;
                 while (he) {
                     /* Collect all the elements of the buckets found non

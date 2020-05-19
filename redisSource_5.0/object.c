@@ -460,6 +460,7 @@ robj *tryObjectEncoding(robj *o) {
     /* Check if we can represent this string as a long integer.
      * Note that we are sure that a string larger than 20 chars is not
      * representable as a 32 nor 64 bit integer. */
+    //如果能用整数编码，就优先用整数编码
     len = sdslen(s);
     if (len <= 20 && string2l(s,len,&value)) {
         /* This object is encodable as a long. Try to use a shared object.
@@ -478,7 +479,7 @@ robj *tryObjectEncoding(robj *o) {
             if (o->encoding == OBJ_ENCODING_RAW) {
                 sdsfree(o->ptr);
                 o->encoding = OBJ_ENCODING_INT;
-                o->ptr = (void*) value;
+                o->ptr = (void*) value; //ptr存放是整数的地址
                 return o;
             } else if (o->encoding == OBJ_ENCODING_EMBSTR) {
                 decrRefCount(o);
@@ -491,6 +492,7 @@ robj *tryObjectEncoding(robj *o) {
      * try the EMBSTR encoding which is more efficient.
      * In this representation the object and the SDS string are allocated
      * in the same chunk of memory to save space and cache misses. */
+    //如果是raw编码，并且长度足够短，以至于可以设置成embstr编码，则会使用embstr编码
     if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT) {
         robj *emb;
 

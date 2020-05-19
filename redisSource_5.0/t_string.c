@@ -83,6 +83,7 @@ void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire,
         addReply(c, abort_reply ? abort_reply : shared.nullbulk);
         return;
     }
+    //实际的赋值操作
     setKey(c->db,key,val);
     server.dirty++;
     if (expire) setExpire(c,c->db,key,mstime()+milliseconds);
@@ -103,6 +104,7 @@ void setCommand(client *c) {
         char *a = c->argv[j]->ptr;
         robj *next = (j == c->argc-1) ? NULL : c->argv[j+1];
 
+        //nx和px是互斥的，
         if ((a[0] == 'n' || a[0] == 'N') &&
             (a[1] == 'x' || a[1] == 'X') && a[2] == '\0' &&
             !(flags & OBJ_SET_XX))
@@ -134,7 +136,7 @@ void setCommand(client *c) {
             return;
         }
     }
-
+    //根据value的情况，决定sds的编码
     c->argv[2] = tryObjectEncoding(c->argv[2]);
     setGenericCommand(c,flags,c->argv[1],c->argv[2],expire,unit,NULL,NULL);
 }
